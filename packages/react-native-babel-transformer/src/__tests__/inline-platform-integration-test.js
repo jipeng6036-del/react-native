@@ -16,14 +16,6 @@ const path = require('node:path');
 const PROJECT_ROOT = path.sep === '/' ? '/my/project' : 'C:\\my\\project';
 const RN_ROOT = path.join(PROJECT_ROOT, 'node_modules', 'react-native');
 
-// The transformer memoizes its resolved Babel config in a module-level
-// closure, keyed on nothing - so a fresh module instance is required for every
-// distinct `options` shape, or later variants silently reuse the first
-// variant's config.
-beforeEach(() => {
-  jest.resetModules();
-});
-
 function transformToCode(
   src: string,
   {
@@ -171,13 +163,9 @@ describe.each([false, true])(
 );
 
 test('the two import-support modes really do produce different output', () => {
-  // Guards the test setup itself: without a module reset between variants the
-  // memoized config leaks and the parameterized suite above would silently run
-  // the same configuration twice.
   const src = "import {Platform} from 'react-native';\nconst x = Other.thing;";
 
   const lowered = transformToCode(src, {experimentalImportSupport: false});
-  jest.resetModules();
   const preserved = transformToCode(src, {experimentalImportSupport: true});
 
   expect(lowered).toContain('require');
@@ -198,3 +186,21 @@ test('inlines before the preset lowers ESM to CommonJS interop', () => {
   expect(code).toContain('"ios"');
   expect(code).not.toMatch(/_reactNative\.Platform/);
 });
+
+test.each([
+  ['ios', 'android'],
+  ['android', 'ios'],
+])(
+  'uses the requested platform when transforming %s then %s',
+  (first, second) => {
+    const src =
+      "import {Platform} from 'react-native';\nconst os = Platform.OS;";
+
+    expect(transformToCode(src, {platform: first})).toContain(
+      `os = "${first}"`,
+    );
+    expect(transformToCode(src, {platform: second})).toContain(
+      `os = "${second}"`,
+    );
+  },
+);

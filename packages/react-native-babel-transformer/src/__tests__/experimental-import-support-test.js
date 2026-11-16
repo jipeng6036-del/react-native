@@ -21,12 +21,6 @@ const PROJECT_BABEL_CONFIG = path.join(
 );
 const SRC = "import foo from './foo';\nexport const bar = foo;";
 
-// The transformer memoizes its resolved Babel config in a module-level
-// closure, so a fresh module instance is required for every distinct config.
-beforeEach(() => {
-  jest.resetModules();
-});
-
 function transformToCode({
   experimentalImportSupport,
   extendsBabelConfigPath,

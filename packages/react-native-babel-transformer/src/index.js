@@ -42,97 +42,68 @@ function isTSXSource(fileName /*: string */) {
   return !!fileName && fileName.endsWith('.tsx');
 }
 
-/**
- * Return a memoized function that checks for the existence of a
- * project level .babelrc file, and if it doesn't exist, reads the
- * default RN babelrc file and uses that.
- */
-const getBabelRC = (function () {
-  let babelRC /*: ?BabelCoreOptions */ = null;
+// Cache config discovery by project root. The fallback preset options belong
+// to the current transform and can vary between bundles in one Metro process.
+const projectBabelConfigPaths /*: Map<string, ?string> */ = new Map();
 
-  /* $FlowFixMe[missing-local-annot] The type annotation(s) required by Flow's
-   * LTI update could not be added via codemod */
-  return function _getBabelRC({
-    projectRoot,
-    extendsBabelConfigPath,
-    ...options
-  }) {
-    if (babelRC != null) {
-      return babelRC;
-    }
+function findProjectBabelConfig(projectRoot /*: ?string */) /*: ?string */ {
+  if (!projectRoot) {
+    return undefined;
+  }
 
-    babelRC = {
-      plugins: [],
-      extends: extendsBabelConfigPath,
-    };
+  if (!projectBabelConfigPaths.has(projectRoot)) {
+    const configPath = ['.babelrc', '.babelrc.js', 'babel.config.js']
+      .map(name => path.resolve(projectRoot, name))
+      .find(candidate => fs.existsSync(candidate));
+    projectBabelConfigPaths.set(projectRoot, configPath);
+  }
 
-    if (extendsBabelConfigPath) {
-      return babelRC;
-    }
+  return projectBabelConfigPaths.get(projectRoot);
+}
 
-    // Let's look for a babel config file in the project root.
-    let projectBabelRCPath;
+/* $FlowFixMe[missing-local-annot] The type annotation(s) required by Flow's
+ * LTI update could not be added via codemod */
+function getBabelRC({
+  projectRoot,
+  extendsBabelConfigPath,
+  ...options
+}) /*: BabelCoreOptions */ {
+  const configPath =
+    extendsBabelConfigPath || findProjectBabelConfig(projectRoot);
 
-    // .babelrc
-    if (projectRoot) {
-      projectBabelRCPath = path.resolve(projectRoot, '.babelrc');
-    }
+  if (configPath) {
+    return {plugins: [], extends: configPath};
+  }
 
-    if (projectBabelRCPath) {
-      // .babelrc.js
-      if (!fs.existsSync(projectBabelRCPath)) {
-        projectBabelRCPath = path.resolve(projectRoot, '.babelrc.js');
-      }
+  const {
+    babelRuntimeModuleName,
+    babelRuntimeVersion,
+    experimentalImportSupport,
+    ...presetOptions
+  } = options;
 
-      // babel.config.js
-      if (!fs.existsSync(projectBabelRCPath)) {
-        projectBabelRCPath = path.resolve(projectRoot, 'babel.config.js');
-      }
-
-      // If we found a babel config file, extend our config off of it
-      // otherwise the default config will be used
-      if (fs.existsSync(projectBabelRCPath)) {
-        // $FlowFixMe[incompatible-use] `extends` is missing in null or undefined.
-        babelRC.extends = projectBabelRCPath;
-      }
-    }
-
-    // If a babel config file doesn't exist in the project then
-    // the default preset for react-native will be used instead.
-    // $FlowFixMe[incompatible-use] `extends` is missing in null or undefined.
-    // $FlowFixMe[incompatible-type] `extends` is missing in null or undefined.
-    if (!babelRC.extends) {
-      const {
-        babelRuntimeModuleName,
-        babelRuntimeVersion,
-        experimentalImportSupport,
-        ...presetOptions
-      } = options;
-
-      // $FlowFixMe[incompatible-use] `presets` is missing in null or undefined.
-      babelRC.presets = [
-        [
-          require('@react-native/babel-preset'),
-          {
-            projectRoot,
-            ...presetOptions,
-            disableImportExportTransform: experimentalImportSupport,
-            // A version is only safe to target alongside the module it
-            // describes, so Metro's `@babel/runtime` is passed as a pair.
-            ...(babelRuntimeModuleName != null && babelRuntimeVersion != null
-              ? {
-                  babelRuntimeModuleName,
-                  enableBabelRuntime: babelRuntimeVersion,
-                }
-              : {enableBabelRuntime: options.enableBabelRuntime}),
-          },
-        ],
-      ];
-    }
-
-    return babelRC;
+  return {
+    plugins: [],
+    presets: [
+      [
+        require('@react-native/babel-preset'),
+        {
+          projectRoot,
+          ...presetOptions,
+          disableImportExportTransform: experimentalImportSupport,
+          // A version is only safe to target alongside the module it
+          // describes, so Metro's `@babel/runtime` is passed as a pair.
+          ...(babelRuntimeModuleName != null && babelRuntimeVersion != null
+            ? {
+                babelRuntimeModuleName,
+                enableBabelRuntime: babelRuntimeVersion,
+              }
+            : {enableBabelRuntime: options.enableBabelRuntime}),
+        },
+      ],
+    ],
   };
-})();
+}
 
 /**
  * Given a filename and options, build a Babel

@@ -24,12 +24,6 @@ const PROJECT_BABEL_CONFIG = path.join(
 // version of at least 7.14.0, and inlines otherwise.
 const SRC = "import * as foo from './foo';\nexport const bar = foo;";
 
-// The transformer memoizes its resolved Babel config in a module-level
-// closure, so a fresh module instance is required for every distinct config.
-beforeEach(() => {
-  jest.resetModules();
-});
-
 const METRO_BABEL_RUNTIME = {
   babelRuntimeModuleName: 'metro:babel-runtime',
   babelRuntimeVersion: '7.29.0',
